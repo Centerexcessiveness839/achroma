@@ -1,0 +1,82 @@
+name: Build and Test
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  build-ubuntu:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            cmake g++ xvfb \
+            qt6-base-dev qt6-webengine-dev \
+            libqtermwidget6-2-dev
+
+      - name: Configure
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTS=ON
+
+      - name: Build
+        run: cmake --build build -j$(nproc)
+
+      - name: Test (offscreen)
+        run: QT_QPA_PLATFORM=offscreen ctest --test-dir build --output-on-failure
+        timeout-minutes: 3
+
+      - name: Test (Xvfb — real DOM rendering)
+        run: xvfb-run -a ctest --test-dir build --output-on-failure
+        timeout-minutes: 3
+
+  build-fedora:
+    runs-on: ubuntu-latest
+    container: fedora:latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          dnf install -y \
+            cmake gcc-c++ xorg-x11-server-Xvfb \
+            qt6-qtbase-devel qt6-qtwebengine-devel \
+            qtermwidget6-devel \
+            make
+
+      - name: Configure
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTS=ON
+
+      - name: Build
+        run: cmake --build build -j$(nproc)
+
+      - name: Test
+        run: xvfb-run -a ctest --test-dir build --output-on-failure
+        timeout-minutes: 3
+
+  sanitize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            cmake g++ xvfb \
+            qt6-base-dev qt6-webengine-dev \
+            libqtermwidget6-2-dev
+
+      - name: Configure (ASan+UBSan)
+        run: cmake -B build/asan -DCMAKE_BUILD_TYPE=Debug -DENABLE_ASAN=ON -DENABLE_UBSAN=ON -DBUILD_TESTS=ON
+
+      - name: Build
+        run: cmake --build build/asan -j$(nproc)
+
+      - name: Test
+        run: QT_QPA_PLATFORM=offscreen ctest --test-dir build/asan --output-on-failure
+        timeout-minutes: 5
