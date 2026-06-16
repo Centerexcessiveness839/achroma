@@ -23,6 +23,9 @@ jobs:
       - name: Build qtermwidget6 from source
         run: |
           git clone --depth 1 https://github.com/lxqt/qtermwidget.git /tmp/qtermwidget
+          sed -i 's/set(QT_MINIMUM_VERSION "6.6.0")/set(QT_MINIMUM_VERSION "6.4.0")/' /tmp/qtermwidget/CMakeLists.txt
+          sed -i '/find_package(lxqt2-build-tools/d' /tmp/qtermwidget/CMakeLists.txt
+          sed -i '/include(LXQt/d' /tmp/qtermwidget/CMakeLists.txt
           cmake -B /tmp/qtermwidget/build -S /tmp/qtermwidget \
             -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr -DQTERMWIDGET_USE_UTEMPTER=OFF
           cmake --build /tmp/qtermwidget/build -j$(nproc)
@@ -38,7 +41,7 @@ jobs:
         run: QT_QPA_PLATFORM=offscreen ctest --test-dir build --output-on-failure
         timeout-minutes: 3
 
-      - name: Test (Xvfb — real DOM rendering)
+      - name: Test (Xvfb)
         run: xvfb-run -a ctest --test-dir build --output-on-failure
         timeout-minutes: 3
 
@@ -82,6 +85,9 @@ jobs:
       - name: Build qtermwidget6 from source
         run: |
           git clone --depth 1 https://github.com/lxqt/qtermwidget.git /tmp/qtermwidget
+          sed -i 's/set(QT_MINIMUM_VERSION "6.6.0")/set(QT_MINIMUM_VERSION "6.4.0")/' /tmp/qtermwidget/CMakeLists.txt
+          sed -i '/find_package(lxqt2-build-tools/d' /tmp/qtermwidget/CMakeLists.txt
+          sed -i '/include(LXQt/d' /tmp/qtermwidget/CMakeLists.txt
           cmake -B /tmp/qtermwidget/build -S /tmp/qtermwidget \
             -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr -DQTERMWIDGET_USE_UTEMPTER=OFF
           cmake --build /tmp/qtermwidget/build -j$(nproc)

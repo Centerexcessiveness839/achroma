@@ -142,7 +142,7 @@ if(BUILD_TESTS)
     target_link_libraries(test_scripts PRIVATE
         Qt6::Core Qt6::Test Qt6::Gui Qt6::Widgets Qt6::WebEngineWidgets)
     add_test(NAME ScriptTests COMMAND test_scripts)
-    set_tests_properties(ScriptTests PROPERTIES ENVIRONMENT "QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu")
+    set_tests_properties(ScriptTests PROPERTIES ENVIRONMENT "QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu --no-sandbox")
     set_property(TEST ScriptTests APPEND PROPERTY ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0")
 endif()
 
