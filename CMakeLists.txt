@@ -97,7 +97,7 @@ if(BUILD_TESTS)
         src/utils.cpp
     )
     target_include_directories(achroma_test PRIVATE ${CMAKE_SOURCE_DIR})
-    target_link_libraries(achroma_test PRIVATE Qt6::Core Qt6::Test)
+    target_link_libraries(achroma_test PRIVATE Qt6::Core Qt6::Gui Qt6::Test)
     add_test(NAME AchromaTests COMMAND achroma_test)
 
     add_executable(test_adblock
