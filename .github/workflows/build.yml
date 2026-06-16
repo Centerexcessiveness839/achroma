@@ -24,6 +24,7 @@ jobs:
         run: |
           git clone --depth 1 https://github.com/lxqt/qtermwidget.git /tmp/qtermwidget
           sed -i 's/set(QT_MINIMUM_VERSION "6.6.0")/set(QT_MINIMUM_VERSION "6.4.0")/' /tmp/qtermwidget/CMakeLists.txt
+          sed -i 's/\.matchView(/.match(/' /tmp/qtermwidget/lib/ColorScheme.cpp
           sed -i '/find_package(Qt6LinguistTools/d' /tmp/qtermwidget/CMakeLists.txt
           sed -i '/find_package(lxqt2-build-tools/d' /tmp/qtermwidget/CMakeLists.txt
           sed -i '/include(LXQt/d' /tmp/qtermwidget/CMakeLists.txt
@@ -90,6 +91,7 @@ jobs:
         run: |
           git clone --depth 1 https://github.com/lxqt/qtermwidget.git /tmp/qtermwidget
           sed -i 's/set(QT_MINIMUM_VERSION "6.6.0")/set(QT_MINIMUM_VERSION "6.4.0")/' /tmp/qtermwidget/CMakeLists.txt
+          sed -i 's/\.matchView(/.match(/' /tmp/qtermwidget/lib/ColorScheme.cpp
           sed -i '/find_package(Qt6LinguistTools/d' /tmp/qtermwidget/CMakeLists.txt
           sed -i '/find_package(lxqt2-build-tools/d' /tmp/qtermwidget/CMakeLists.txt
           sed -i '/include(LXQt/d' /tmp/qtermwidget/CMakeLists.txt
