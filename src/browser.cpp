@@ -281,7 +281,7 @@ BrowserTabs::BrowserTabs(QWidget* parent) : QObject(parent)
         }
     );
 
-    applyWebViewSettings(QWebEngineProfile::defaultProfile()->settings());
+    applyWebViewSettings(Achroma::mainProfile()->settings());
     restoreSession();
 }
 
@@ -395,7 +395,9 @@ void BrowserTabs::addNewTab(const QUrl& url)
         return;
     }
 
+    auto* page = new QWebEnginePage(Achroma::mainProfile(), nullptr);
     QWebEngineView* view = new QWebEngineView();
+    view->setPage(page);
     applyWebViewSettings(view->settings());
     if (url.isEmpty())
     {
@@ -517,6 +519,8 @@ void BrowserTabs::addNewTab(const QUrl& url)
     );
     connect(view->page(), &QWebEnginePage::linkHovered, this, &BrowserTabs::linkHovered);
 
+    QT_WARNING_PUSH
+    QT_WARNING_DISABLE_DEPRECATED
     connect(
         view->page(),
         &QWebEnginePage::featurePermissionRequested,
@@ -537,6 +541,7 @@ void BrowserTabs::addNewTab(const QUrl& url)
             );
         }
     );
+    QT_WARNING_POP
 
     connect(
         view->page(),
@@ -667,6 +672,8 @@ void BrowserTabs::addIncognitoTab(const QUrl& url)
         }
     );
     connect(view->page(), &QWebEnginePage::linkHovered, this, &BrowserTabs::linkHovered);
+    QT_WARNING_PUSH
+    QT_WARNING_DISABLE_DEPRECATED
     connect(
         view->page(),
         &QWebEnginePage::featurePermissionRequested,
@@ -687,6 +694,7 @@ void BrowserTabs::addIncognitoTab(const QUrl& url)
             );
         }
     );
+    QT_WARNING_POP
     connect(
         view->page(),
         &QWebEnginePage::recentlyAudibleChanged,
@@ -1185,7 +1193,7 @@ void BrowserTabs::toggleDarkMode()
 #endif
     }
 #if QT_VERSION >= QT_VERSION_CHECK(6, 7, 0)
-    QWebEngineProfile::defaultProfile()->settings()->setAttribute(QWebEngineSettings::ForceDarkMode, m_darkModeEnabled);
+    Achroma::mainProfile()->settings()->setAttribute(QWebEngineSettings::ForceDarkMode, m_darkModeEnabled);
 #endif
 }
 

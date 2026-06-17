@@ -56,6 +56,10 @@ make -C build -j$(nproc)
 | Command system | `:open`, `:tab`, `:search`, `:hint`, `:bookmark`, `:session`, and more |
 | Fuzzy finder | `Ctrl+Shift+P` finder for files, tabs, bookmarks, history, and commands; press it again or `Escape` to close |
 | Ad blocking | EasyList-style domain blocklist (`~/.config/achroma/blocklist.txt`) |
+| Chrome fingerprint | Full `window.chrome`, `userAgentData`, Sec-CH-UA HTTP headers, plugins, credentials — passes Google sign-in checks |
+| Cookie import | `:cookies` imports Google sessions from Firefox, Chromium, or Netscape `cookies.txt` files; `:cookies clear` to reset |
+| Header diagnostic | `:headers` inspects HTTP request headers and JS environment vs expected Chrome values |
+| System browser fallback | `:system` / `Ctrl+Shift+O` opens current URL in system browser |
 | IPC control | Unix socket, `achroma-cli` from any terminal |
 | Markdown reader | `:md <file>` renders local Markdown in a styled in-tab reader view |
 | Audio indicator | Title bar shows a subtle activity meter while any tab is playing audio |
@@ -191,6 +195,9 @@ Type `:command` in the URL bar, or prefix with `:` in the terminal.
 | `install` | Find install command on page |
 | `notes` | Quick scratchpad |
 | `markdown` / `md <file>` | Render local Markdown in a styled reader tab |
+| `import-cookies` / `cookies [status\|clear\|firefox\|chromium\|file <path>]` | Import, clear, or inspect browser cookies; `cookies.txt` avoids Chromium encryption |
+| `headers` | Diagnostic: inspect HTTP headers and browser fingerprint |
+| `system` | Open current URL in system browser |
 | `session save/load <name>` | Named session management |
 
 ### Terminal
@@ -230,6 +237,7 @@ Type `:command` in the URL bar, or prefix with `:` in the terminal.
 | `Ctrl+Shift+D` | Toggle dark mode |
 | `Ctrl+Shift+A` | Toggle ad blocking |
 | `Ctrl+Shift+R` | Toggle reader mode |
+| `Ctrl+Shift+O` | Open in system browser |
 | `Ctrl+U` | View page source |
 | `Ctrl+P` | Print / save as PDF |
 | `Ctrl+Shift+B` | Toggle bookmark bar |
@@ -331,7 +339,10 @@ src/
   triggers.h/cpp         Terminal output pattern matching
   fuzzyfinder.h/cpp      Fuzzy file/tab/bookmark/command search
   ipc.h/cpp              Unix socket server for CLI control
-  adblockinterceptor.h/cpp  URL request interceptor (EasyList-style)
+  adblockinterceptor.h/cpp  URL request interceptor (EasyList-style + Sec-CH-UA header patching)
+  cookieimport.h/cpp     Cookie import from Firefox, Chromium, and Netscape files
+  headerdump.h/cpp       Local HTTP server for header/fingerprint diagnostics
+  profile.cpp            Named WebEngine profile factory (persistent, non-off-the-record)
   splash.h/cpp           Startup splash screen
   window.h/cpp           Main window, layout, shortcuts, dynamic help overlay, close confirmation
   utils.h/cpp            URL formatting, ANSI stripping, JS injection, Markdown reader HTML

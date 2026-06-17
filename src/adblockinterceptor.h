@@ -18,9 +18,20 @@ public:
     {
         m_enabled = on;
     }
+    void setChromeVersion(const QString& ver)
+    {
+        m_chromeVersion = ver;
+    }
     bool matchesDomain(const QUrl& url) const;
+    int domainCount() const
+    {
+        return m_blockedDomains.size();
+    }
 
 private:
+    void loadBuiltinList();
+
     QSet<QString> m_blockedDomains;
+    QString m_chromeVersion;
     bool m_enabled = true;
 };

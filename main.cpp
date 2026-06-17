@@ -5,6 +5,11 @@
 
 int main(int argc, char* argv[])
 {
+    // Disable Chromium's native Sec-CH-UA header generation so our
+    // QWebEngineUrlRequestInterceptor can supply Chrome-branded headers
+    // without Chromium overwriting them with QtWebEngine brands.
+    qputenv("QTWEBENGINE_CHROMIUM_FLAGS", "--disable-features=UserAgentClientHint");
+
     QApplication app(argc, argv);
     app.setOrganizationName("achroma");
     app.setApplicationName("achroma");

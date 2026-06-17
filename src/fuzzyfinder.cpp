@@ -2,7 +2,9 @@
 #include "browser.h"
 #include "commands.h"
 #include "terminal.h"
+#include "utils.h"
 #include <QApplication>
+#include <QColor>
 #include <QDateTime>
 #include <QDesktopServices>
 #include <QDir>
@@ -153,34 +155,21 @@ QString shellQuote(const QString& text)
 
 FuzzyFinder::FuzzyFinder(QWidget* parent) : QFrame(parent)
 {
-    setStyleSheet("QFrame { background-color: #0d0d0d; border: 1px solid #333; border-radius: 6px; }");
-    setFixedSize(560, 360);
+    setStyleSheet(Achroma::Theme::panelFrame());
+    setFixedSize(600, 400);
 
     QVBoxLayout* layout = new QVBoxLayout(this);
     layout->setContentsMargins(8, 8, 8, 8);
     layout->setSpacing(4);
 
     m_input = new QLineEdit(this);
-    m_input->setStyleSheet(
-        "QLineEdit { background: #111; color: #fff; border: 1px solid #333; font-family: monospace; font-size: 14px; "
-        "padding: 6px 8px; }"
-    );
-    m_input->setPlaceholderText("Search files, tabs, bookmarks, history, commands...");
+    m_input->setStyleSheet(Achroma::Theme::inputField());
+    m_input->setPlaceholderText("Search tabs, files, history, commands  ( : for command mode )");
     m_input->installEventFilter(this);
     layout->addWidget(m_input);
 
     m_list = new QListWidget(this);
-    m_list->setStyleSheet(
-        "QListWidget { background: #0d0d0d; color: #aaa; border: none; "
-        "font-family: monospace; font-size: 12px; outline: none; }"
-        "QListWidget::item { padding: 4px 8px; }"
-        "QListWidget::item:selected { background: #1e1e1e; color: #fff; }"
-        "QScrollBar:vertical { width: 3px; background: transparent; margin: 0; border: none; }"
-        "QScrollBar::handle:vertical { background: #2a2a2a; border-radius: 1px; min-height: 20px; }"
-        "QScrollBar::handle:vertical:hover { background: #3a3a3a; }"
-        "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }"
-        "QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: none; }"
-    );
+    m_list->setStyleSheet(Achroma::Theme::listView());
     m_list->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     m_list->installEventFilter(this);
     layout->addWidget(m_list);
@@ -353,117 +342,161 @@ void FuzzyFinder::updateFuzzyFinder(const QString& query)
         return;
     }
 
+    const bool cmdMode = q.startsWith(':');
+    const QString cmdQuery = cmdMode ? q.mid(1) : q;
+
     QList<FinderItem> items;
 
-    for (int i = 0; m_browser && i < m_browser->tabCount(); ++i)
+    if (!cmdMode)
     {
-        const QString text = m_browser->tabText(i);
-        const QString url = m_browser->urlForTab(i);
-        items.append({text, url, 'T', "tab " + QString::number(i), 0});
-    }
-
-    {
-        QSettings s("Achroma", "Achroma");
-        s.beginGroup("bookmarks");
-        for (const QString& key : s.childKeys())
-            items.append({key, s.value(key).toString(), 'B', "", 0});
-        s.endGroup();
-    }
-
-    if (m_browser)
-    {
-        QSet<QString> seen;
-        for (int i = 0; i < m_browser->tabCount(); i++)
-            seen.insert(m_browser->urlForTab(i));
-        QSettings s("Achroma", "Achroma");
-        s.beginGroup("bookmarks");
-        for (const QString& key : s.childKeys())
-            seen.insert(s.value(key).toString());
-        s.endGroup();
-        for (const QString& u : m_browser->historyUrls())
+        for (int i = 0; m_browser && i < m_browser->tabCount(); ++i)
         {
-            if (!seen.contains(u))
-                items.append({u, u, 'H', "", 0});
+            const QString text = m_browser->tabText(i);
+            const QString url = m_browser->urlForTab(i);
+            items.append({text, url, 'T', "tab " + QString::number(i), 0});
+        }
+
+        {
+            QSettings s("Achroma", "Achroma");
+            s.beginGroup("bookmarks");
+            for (const QString& key : s.childKeys())
+                items.append({key, s.value(key).toString(), 'B', "", 0});
+            s.endGroup();
+        }
+
+        if (m_browser)
+        {
+            QSet<QString> seen;
+            for (int i = 0; i < m_browser->tabCount(); i++)
+                seen.insert(m_browser->urlForTab(i));
+            QSettings s("Achroma", "Achroma");
+            s.beginGroup("bookmarks");
+            for (const QString& key : s.childKeys())
+                seen.insert(s.value(key).toString());
+            s.endGroup();
+            for (const QString& u : m_browser->historyUrls())
+            {
+                if (!seen.contains(u))
+                    items.append({u, u, 'H', "", 0});
+            }
         }
     }
 
-    const QList<QPair<QString, QString>> cmds = {
-        {"help", "Show help overlay"},      {"home", "Go to homepage"},          {"open", "Open URL"},
-        {"tab", "Open in new tab"},         {"fullscreen", "Toggle fullscreen"}, {"devtools", "Developer tools"},
-        {"dark", "Toggle dark mode"},       {"reader", "Reader mode"},           {"adblock", "Toggle ad blocking"},
-        {"notes", "Quick notes"},           {"run", "Run code snippet"},         {"man", "Manual page lookup"},
-        {"tldr", "TL;DR page lookup"},      {"docs", "Documentation search"},    {"issues", "Open GitHub issues"},
-        {"prs", "Open GitHub PRs"},         {"blame", "Git blame view"},         {"session", "Save/load session"},
-        {"pin", "Pin current tab"},         {"undo", "Reopen closed tab"},       {"history", "Recent URLs"},
-        {"bookmarks", "List bookmarks"},    {"print", "Print to PDF"},           {"source", "View page source"},
-        {"incognito", "New incognito tab"}, {"duplicate", "Duplicate tab"},      {"profile", "Switch terminal profile"},
-        {"clear", "Clear terminal"},        {"reload", "Reload config"},         {"finder", "Fuzzy finder"},
-    };
-    for (const auto& c : cmds)
-        items.append({":" + c.first + " - " + c.second, "", 'C', c.first, 0});
-
-    if (q.size() < 2)
+    if (m_dispatcher)
     {
-        m_fileResults.clear();
-        m_fileQuery.clear();
+        for (const auto& meta : m_dispatcher->builtinCommands())
+        {
+            QString display = ":" + meta.name;
+            if (!meta.argHint.isEmpty())
+                display += " " + meta.argHint;
+            display += "  —  " + meta.description;
+            if (!meta.aliases.isEmpty())
+                display += "  [" + meta.aliases.join(", ") + "]";
+            items.append({display, "", 'C', meta.name, 0});
+        }
+        for (auto it = m_dispatcher->customCommands().constBegin(); it != m_dispatcher->customCommands().constEnd();
+             ++it)
+        {
+            const QString action = it.value()["action"].toString("custom");
+            items.append({":" + it.key() + "  —  " + action + " (custom)", "", 'C', it.key(), 0});
+        }
+        QSet<QString> knownEngines;
+        for (const auto& meta : m_dispatcher->builtinCommands())
+        {
+            knownEngines.insert(meta.name);
+            for (const auto& a : meta.aliases)
+                knownEngines.insert(a);
+        }
+        for (auto it = m_dispatcher->searchEngines().constBegin(); it != m_dispatcher->searchEngines().constEnd(); ++it)
+        {
+            if (knownEngines.contains(it.key()) || m_dispatcher->customCommands().contains(it.key()))
+                continue;
+            items.append({":" + it.key() + " <query>  —  search engine", "", 'C', it.key(), 0});
+        }
     }
-    else if (m_fileQuery == q)
-    {
-        for (const QString& path : m_fileResults)
-            items.append({path, path, 'F', "", 0});
-    }
-    else
-    {
-        QStringList roots = m_dispatcher ? m_dispatcher->devConfig().searchDirs : QStringList();
-        if (!roots.contains(QDir::homePath()))
-            roots.append(QDir::homePath());
 
-        disconnect(m_debounceConn);
-        m_debounceConn = connect(
-            m_debounce,
-            &QTimer::timeout,
-            this,
-            [this, q, roots]()
-            {
-                if (!m_input || m_input->text().trimmed() != q)
-                    return;
-                auto* watcher = new QFutureWatcher<QStringList>(this);
-                connect(
-                    watcher,
-                    &QFutureWatcher<QStringList>::finished,
-                    this,
-                    [this, watcher, q]()
-                    {
-                        watcher->deleteLater();
-                        if (!m_input || m_input->text().trimmed() != q)
-                            return;
-                        m_fileQuery = q;
-                        m_fileResults = watcher->result();
-                        updateFuzzyFinder(m_input->text());
-                    }
-                );
-                watcher->setFuture(QtConcurrent::run(FuzzyFinder::findMatchingFiles, q, 30, roots));
-            }
-        );
-        m_debounce->start();
+    if (!cmdMode)
+    {
+        if (q.size() < 2)
+        {
+            m_fileResults.clear();
+            m_fileQuery.clear();
+        }
+        else if (m_fileQuery == q)
+        {
+            for (const QString& path : m_fileResults)
+                items.append({path, path, 'F', "", 0});
+        }
+        else
+        {
+            QStringList roots = m_dispatcher ? m_dispatcher->devConfig().searchDirs : QStringList();
+            if (!roots.contains(QDir::homePath()))
+                roots.append(QDir::homePath());
+
+            disconnect(m_debounceConn);
+            m_debounceConn = connect(
+                m_debounce,
+                &QTimer::timeout,
+                this,
+                [this, q, roots]()
+                {
+                    if (!m_input || m_input->text().trimmed() != q)
+                        return;
+                    auto* watcher = new QFutureWatcher<QStringList>(this);
+                    connect(
+                        watcher,
+                        &QFutureWatcher<QStringList>::finished,
+                        this,
+                        [this, watcher, q]()
+                        {
+                            watcher->deleteLater();
+                            if (!m_input || m_input->text().trimmed() != q)
+                                return;
+                            m_fileQuery = q;
+                            m_fileResults = watcher->result();
+                            updateFuzzyFinder(m_input->text());
+                        }
+                    );
+                    watcher->setFuture(QtConcurrent::run(FuzzyFinder::findMatchingFiles, q, 30, roots));
+                }
+            );
+            m_debounce->start();
+        }
     }
 
     QList<FinderItem> matches;
     const QString fileDisplayQuery = expandHomePath(q);
     for (FinderItem item : items)
     {
-        int score = scoreFuzzyQuery(item.kind == 'F' ? fileDisplayQuery : q, item.text);
-        if (item.kind == 'F')
+        if (cmdMode && item.kind != 'C')
+            continue;
+
+        int score;
+        if (item.kind == 'C')
         {
+            const QString matchTarget = item.action + " " + item.text;
+            score = cmdQuery.isEmpty() ? 0 : scoreFuzzyQuery(cmdQuery, matchTarget);
+            if (score < 0 && !cmdQuery.isEmpty())
+                continue;
+        }
+        else if (item.kind == 'F')
+        {
+            score = scoreFuzzyQuery(fileDisplayQuery, item.text);
             const QFileInfo info(item.url);
             const int nameScore = scoreFuzzyQuery(q, info.fileName());
             if (nameScore >= 0)
                 score = qMax(score, nameScore + 180);
-        }
-        if (score < 0)
-            continue;
-        if (item.kind == 'F')
+            if (score < 0)
+                continue;
             score += 80;
+        }
+        else
+        {
+            score = scoreFuzzyQuery(q, item.text);
+            if (score < 0)
+                continue;
+        }
+
         item.score = score;
         matches.append(item);
     }
@@ -479,11 +512,34 @@ void FuzzyFinder::updateFuzzyFinder(const QString& query)
         }
     );
 
-    const int maxRows = 20;
+    const int maxRows = cmdMode ? 30 : 20;
     for (int i = 0; i < matches.size() && i < maxRows; ++i)
     {
         const FinderItem& item = matches.at(i);
-        QListWidgetItem* lw = new QListWidgetItem(QString("[%1] %2").arg(item.kind).arg(item.text.left(120)));
+        QString prefix;
+        switch (item.kind.toLatin1())
+        {
+            case 'T':
+                prefix = "tab  ";
+                break;
+            case 'B':
+                prefix = "bm   ";
+                break;
+            case 'H':
+                prefix = "hist ";
+                break;
+            case 'F':
+                prefix = "file ";
+                break;
+            case 'C':
+                prefix = "cmd  ";
+                break;
+            default:
+                prefix = "     ";
+                break;
+        }
+        QListWidgetItem* lw = new QListWidgetItem(prefix + item.text.left(130));
+        lw->setForeground(item.kind == 'C' ? QColor("#8fb6ff") : QColor("#aaaaaa"));
         lw->setData(Qt::UserRole, item.url);
         lw->setData(Qt::UserRole + 1, item.action);
         lw->setData(Qt::UserRole + 2, item.kind);

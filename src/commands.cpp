@@ -1,8 +1,11 @@
 #include "commands.h"
 #include "browser.h"
+#include "cookieimport.h"
+#include "headerdump.h"
 #include "terminal.h"
 #include "utils.h"
 #include <QColor>
+#include <QDesktopServices>
 #include <QDir>
 #include <QFile>
 #include <QFileDialog>
@@ -21,7 +24,9 @@
 #include <QTabWidget>
 #include <QTimer>
 #include <QUrl>
+#include <QWebEngineCookieStore>
 #include <QWebEnginePage>
+#include <QWebEngineProfile>
 #include <QWebEngineView>
 
 CommandDispatcher::CommandDispatcher(QObject* parent) : QObject(parent)
@@ -605,6 +610,13 @@ void CommandDispatcher::setupBuiltins()
             }
             QJsonObject root;
             root["tabs"] = tabs;
+            QString cwd = m_terminal ? m_terminal->shellCwd() : QString();
+            if (!cwd.isEmpty())
+            {
+                QJsonObject termState;
+                termState["cwd"] = cwd;
+                root["terminal"] = termState;
+            }
             QFile f(sessionsDir + "/" + name + ".json");
             if (f.open(QIODevice::WriteOnly | QIODevice::Truncate))
                 f.write(QJsonDocument(root).toJson(QJsonDocument::Compact));
@@ -628,6 +640,12 @@ void CommandDispatcher::setupBuiltins()
                     QUrl url(t["url"].toString());
                     if (url.isValid())
                         m_browser->addNewTab(url);
+                }
+                if (doc.object().contains("terminal") && m_terminal)
+                {
+                    QString cwd = doc.object()["terminal"].toObject()["cwd"].toString();
+                    if (!cwd.isEmpty())
+                        m_terminal->sendText("cd " + cwd + "\n");
                 }
                 m_terminal->sendText("# session '" + name + "' loaded (" + QString::number(tabs.size()) + " tabs)\n");
             }
@@ -716,6 +734,164 @@ void CommandDispatcher::setupBuiltins()
             v->triggerPageAction(QWebEnginePage::InspectElement);
     };
 
+    m_dispatch["system"] = [this](QWebEngineView* v, const QString&)
+    {
+        if (!v || !m_browser)
+            return;
+        const QUrl url = v->url();
+        if (url.isValid() && !url.isEmpty())
+            QDesktopServices::openUrl(url);
+    };
+
+    m_dispatch["headers"] = [this](QWebEngineView*, const QString&)
+    {
+        if (!m_browser)
+            return;
+        auto* tester = new HeaderDump(m_browser);
+        tester->start();
+        m_browser->navigateOrNewTab(QUrl(QString("http://127.0.0.1:%1/").arg(tester->port())));
+    };
+
+    m_dispatch["import-cookies"] = m_dispatch["cookies"] = [this](QWebEngineView*, const QString& arg)
+    {
+        auto* profile = Achroma::mainProfile();
+        QStringList log;
+        const QString trimmedArg = arg.trimmed();
+        const QString source = trimmedArg.toLower();
+
+        if (source == "status")
+        {
+            QString policy = "unknown";
+            switch (profile->persistentCookiesPolicy())
+            {
+                case QWebEngineProfile::NoPersistentCookies:
+                    policy = "none";
+                    break;
+                case QWebEngineProfile::AllowPersistentCookies:
+                    policy = "persistent only";
+                    break;
+                case QWebEngineProfile::ForcePersistentCookies:
+                    policy = "force session + persistent";
+                    break;
+                case QWebEngineProfile::OnlyPersistentCookies:
+                    policy = "only persistent";
+                    break;
+            }
+            log << "cookie policy: " + policy;
+            log << QString("off the record: %1").arg(profile->isOffTheRecord() ? "yes" : "no");
+            log << "storage: " + profile->persistentStoragePath();
+            log << "cache: " + profile->cachePath();
+            if (m_terminal)
+                m_terminal->sendText("# " + log.join("\n# ") + "\n");
+            return;
+        }
+
+        if (source == "clear")
+        {
+            auto* store = profile->cookieStore();
+            if (store)
+            {
+                store->deleteAllCookies();
+                log << "all cookies cleared";
+                log << "re-import with :import-cookies file <path>";
+            }
+            else
+            {
+                log << "cookie store not available";
+            }
+            if (m_terminal)
+                m_terminal->sendText("# " + log.join("\n# ") + "\n");
+            return;
+        }
+
+        QString filePath;
+        if (source.startsWith("file "))
+            filePath = trimmedArg.mid(5).trimmed();
+        else if (source.endsWith(".txt") || source.endsWith(".cookies"))
+            filePath = trimmedArg;
+        if (!filePath.isEmpty())
+        {
+            if (filePath.startsWith('~'))
+                filePath = QDir::homePath() + filePath.mid(1);
+            if (!filePath.startsWith('/'))
+            {
+                const QString cwd = m_terminal ? m_terminal->shellCwd() : QString();
+                filePath =
+                    cwd.isEmpty() ? QFileInfo(filePath).absoluteFilePath() : QDir(cwd).absoluteFilePath(filePath);
+            }
+
+            int n = CookieImporter::importFromNetscapeFile(profile, filePath);
+            if (n > 0)
+            {
+                log << "imported " + QString::number(n) + " cookie(s) from " + filePath;
+                log << "reload Google tabs or open accounts.google.com";
+            }
+            else
+            {
+                log << "no cookies imported from " + filePath;
+                log << "expected Netscape cookies.txt format";
+            }
+            if (m_terminal)
+                m_terminal->sendText("# " + log.join("\n# ") + "\n");
+            return;
+        }
+
+        const bool tryFirefox = source.isEmpty() || source == "firefox" || source == "ff";
+        const bool tryChrome = source.isEmpty() || source == "chrome" || source == "chromium" || source == "brave";
+
+        if (tryFirefox)
+        {
+            const QString ffPath = CookieImporter::findFirefoxCookiesPath();
+            if (!ffPath.isEmpty())
+            {
+                log << "trying Firefox: " + ffPath;
+                int n = CookieImporter::importFromFirefox(profile);
+                if (n > 0)
+                {
+                    log << "imported " + QString::number(n) + " cookie(s) from Firefox";
+                    log << "reload Google tabs or open accounts.google.com";
+                    if (m_terminal)
+                        m_terminal->sendText("# " + log.join("\n# ") + "\n");
+                    return;
+                }
+                log << "Firefox returned " + QString::number(n);
+            }
+            else
+            {
+                log << "no Firefox profile found";
+            }
+        }
+
+        if (tryChrome)
+        {
+            const QString chromePath = CookieImporter::findChromeCookiesPath();
+            if (!chromePath.isEmpty())
+            {
+                log << "trying Chromium: " + chromePath;
+                int n = CookieImporter::importFromChrome(profile);
+                log << "Chromium returned " + QString::number(n);
+                if (n > 0)
+                {
+                    log << "reload Google tabs or open accounts.google.com";
+                    if (m_terminal)
+                        m_terminal->sendText("# " + log.join("\n# ") + "\n");
+                    return;
+                }
+                log << "Chromium cookies are often encrypted; Firefox import is more reliable";
+            }
+            else
+            {
+                log << "no Chrome/Chromium profile found";
+            }
+        }
+
+        if (!source.isEmpty() && !tryFirefox && !tryChrome)
+            log << "usage: :import-cookies [status|firefox|chromium|file <cookies.txt>]";
+        log << "no cookies imported";
+        if (m_terminal)
+            m_terminal->sendText("# " + log.join("\n# ") + "\n");
+    };
+
     m_dispatch["source"] = [this](QWebEngineView* v, const QString&)
     {
         if (!v || !m_browser)
@@ -760,8 +936,45 @@ void CommandDispatcher::setupBuiltins()
         }
     };
 
-    m_dispatch["adblock"] = [this](QWebEngineView*, const QString&)
+    m_dispatch["adblock"] = [this](QWebEngineView*, const QString& arg)
     {
+        if (arg == "download")
+        {
+            if (!m_terminal)
+                return;
+            QString dest = Achroma::configDir() + "/blocklist.txt";
+            QDir().mkpath(Achroma::configDir());
+            QString url = "https://easylist.to/easylist/easylist.txt";
+            QProcess* p = new QProcess(this);
+            p->setProcessChannelMode(QProcess::MergedChannels);
+            m_terminal->sendText("# downloading EasyList to " + dest + " ...\n");
+            connect(
+                p,
+                &QProcess::finished,
+                this,
+                [this, p, dest](int code, QProcess::ExitStatus)
+                {
+                    if (code == 0)
+                        m_terminal->sendText("# blocklist saved — run :reload to apply\n");
+                    else
+                        m_terminal->sendText("# download failed: " + QString::fromUtf8(p->readAll()).trimmed() + "\n");
+                    p->deleteLater();
+                }
+            );
+            if (!QStandardPaths::findExecutable("curl").isEmpty())
+                p->start("curl", {"-L", "--progress-bar", "-o", dest, url});
+            else if (!QStandardPaths::findExecutable("wget").isEmpty())
+                p->start("wget", {"-O", dest, url});
+            else
+                m_terminal->sendText("# curl or wget required — install either and retry\n");
+            return;
+        }
+        if (arg == "status")
+        {
+            if (m_terminal)
+                m_terminal->sendText(QString("# ad block %1\n").arg(m_adBlockEnabled ? "enabled" : "disabled"));
+            return;
+        }
         m_adBlockEnabled = !m_adBlockEnabled;
         if (adBlockToggleCallback)
             adBlockToggleCallback(m_adBlockEnabled);
@@ -888,6 +1101,77 @@ void CommandDispatcher::setupBuiltins()
             }
         );
         p->start(prog, parts);
+    };
+
+    m_builtinMeta = {
+        {"open", "Navigate to URL or bookmark", "<url>", "navigation", {"o"}},
+        {"tab", "Open URL in new tab", "<url>", "navigation", {"t"}},
+        {"close", "Close current tab", "", "navigation", {"c"}},
+        {"back", "Go back", "", "navigation", {"b"}},
+        {"forward", "Go forward", "", "navigation", {"f"}},
+        {"r", "Reload page", "", "navigation", {}},
+        {"home", "Go to home dashboard", "", "navigation", {}},
+        {"undo", "Reopen closed tab", "", "navigation", {"u"}},
+        {"next", "Next tab", "", "navigation", {"n"}},
+        {"prev", "Previous tab", "", "navigation", {"p"}},
+        {"goto", "Switch to tab by index", "<n>", "navigation", {"g"}},
+        {"duplicate", "Duplicate current tab", "", "navigation", {"dup"}},
+        {"incognito", "Open incognito tab", "[url]", "navigation", {"incog"}},
+        // search
+        {"search", "DuckDuckGo search", "<query>", "search", {"s"}},
+        {"bookmark", "Bookmark current page", "<name>", "search", {"bm"}},
+        {"bookmarks", "List bookmarks in terminal", "", "search", {}},
+        // tools
+        {"help", "Show keyboard/command help", "", "tools", {}},
+        {"fullscreen", "Toggle fullscreen", "", "tools", {}},
+        {"fuzzy", "Open command/file finder", "", "tools", {"finder"}},
+        {"find", "Find in page", "", "tools", {}},
+        {"dark", "Toggle dark mode", "", "tools", {"light"}},
+        {"adblock", "Toggle/download/status ad blocking", "[download|status]", "tools", {}},
+        {"zoom", "Set page zoom", "<pct|reset>", "tools", {}},
+        {"print", "Print or save as PDF", "", "tools", {}},
+        {"reader", "Toggle reader mode", "", "tools", {}},
+        {"notes", "Open scratch notes tab", "", "tools", {}},
+        {"run", "Run extracted code snippet", "", "tools", {}},
+        {"devtools", "Open developer tools", "", "tools", {"dev"}},
+        {"source", "View page source", "", "tools", {}},
+        {"system", "Open current URL in system browser", "", "tools", {}},
+        {"headers", "Diagnose browser headers and fingerprint", "", "tools", {}},
+        {"import-cookies",
+         "Import Google cookies from Firefox/Chromium/cookies.txt",
+         "[status|firefox|chromium|file <path>]",
+         "tools",
+         {"cookies"}},
+        {"pipe", "Run command, show output in tab", "<cmd>", "tools", {}},
+        {"history", "Show recent URLs in terminal", "", "tools", {}},
+        {"session", "Save/load/list named session", "save|load|list <name>", "tools", {}},
+        {"markdown", "Render markdown file in browser", "<path>", "tools", {"md"}},
+        {"man", "Open man page in browser", "[section] <name>", "tools", {}},
+        {"tldr", "Open tldr page", "<name>", "tools", {}},
+        {"docs", "Open documentation URL", "<term>", "tools", {}},
+        {"reload", "Reload config.json", "", "tools", {}},
+        // github
+        {"issues", "GitHub issues for current repo", "", "github", {}},
+        {"prs", "GitHub pull requests", "", "github", {}},
+        {"actions", "GitHub Actions", "", "github", {}},
+        {"blame", "Switch blob to blame view", "", "github", {}},
+        {"permalink", "Get permalink to current line", "", "github", {}},
+        // web
+        {"url", "Print current URL to terminal", "", "web", {}},
+        {"focus", "Focus URL bar", "", "web", {}},
+        {"lasturl", "Navigate to last detected URL", "", "web", {}},
+        {"bmbar", "Toggle bookmark bar", "", "web", {}},
+        {"pin", "Pin or unpin current tab", "", "web", {}},
+        {"hint", "Show link hints overlay", "", "web", {}},
+        // terminal
+        {"clear", "Clear terminal", "", "terminal", {}},
+        {"copy", "Copy terminal selection", "", "terminal", {}},
+        {"paste", "Paste to terminal", "", "terminal", {}},
+        {"searchterm", "Toggle terminal search bar", "", "terminal", {"sterm"}},
+        {"profile", "Switch terminal profile", "[name]", "terminal", {}},
+        {"codeblock", "Extract code block to /tmp file", "", "terminal", {}},
+        {"tosterm", "Send page selection to terminal", "", "terminal", {}},
+        {"install", "Find install command on page", "", "terminal", {}},
     };
 }
 

@@ -270,6 +270,12 @@ void IPCServer::handleConnection()
                 else
                     respond(false, "failed to save: " + path);
             }
+            else if (cmd == "import-cookies" || cmd == "cookies")
+            {
+                if (m_dispatcher)
+                    m_dispatcher->execute("import-cookies" + (arg.isEmpty() ? QString() : " " + arg));
+                respond(true);
+            }
             else
             {
                 respond(false, "unknown command: " + cmd);

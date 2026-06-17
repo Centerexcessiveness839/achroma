@@ -2,15 +2,26 @@
 #include <QHash>
 #include <QJsonArray>
 #include <QJsonObject>
+#include <QList>
 #include <QMap>
 #include <QObject>
 #include <QString>
+#include <QStringList>
 #include <functional>
 
 class QWebEngineView;
 class BrowserTabs;
 class Terminal;
 class QFileSystemWatcher;
+
+struct CommandMeta
+{
+    QString name;
+    QString description;
+    QString argHint;   // e.g. "<url>", "[name]", ""
+    QString category;  // navigation | search | terminal | tools | github | web
+    QStringList aliases;
+};
 
 struct AppConfig
 {
@@ -78,6 +89,7 @@ struct KeyConfig
     QString codeBlock = "Ctrl+Shift+.";
     QString installCmd = "Ctrl+Shift+I";
     QString fuzzyFinder = "Ctrl+Shift+P";
+    QString systemBrowser = "Ctrl+Shift+O";
 };
 
 class CommandDispatcher : public QObject
@@ -109,6 +121,10 @@ public:
     QJsonArray triggers() const
     {
         return m_mergedTriggers;
+    }
+    const QList<CommandMeta>& builtinCommands() const
+    {
+        return m_builtinMeta;
     }
     const AppConfig& appearance() const
     {
@@ -150,6 +166,7 @@ private:
 
     using CommandFn = std::function<void(QWebEngineView*, QString)>;
     QHash<QString, CommandFn> m_dispatch;
+    QList<CommandMeta> m_builtinMeta;
     QMap<QString, QJsonObject> m_customCommands;
     QMap<QString, QString> m_searchEngines;
     QJsonArray m_mergedTriggers;

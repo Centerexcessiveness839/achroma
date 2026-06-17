@@ -55,6 +55,7 @@ private:
     QWidget* m_titleBar = nullptr;
     QLabel* m_titleLabel = nullptr;
     QLabel* m_audioIndicator = nullptr;
+    QLabel* m_adblockIndicator = nullptr;
     QTimer* m_audioTimer = nullptr;
     bool m_audioActive = false;
     int m_audioPhase = 0;

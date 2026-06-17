@@ -55,12 +55,13 @@ if(ENABLE_ASAN OR ENABLE_UBSAN OR ENABLE_TSAN)
     message(STATUS "  ASAN: ${ENABLE_ASAN}, UBSAN: ${ENABLE_UBSAN}, TSAN: ${ENABLE_TSAN}")
 endif()
 
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets WebEngineWidgets Concurrent)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets WebEngineWidgets Concurrent Sql)
 find_package(qtermwidget6 REQUIRED)
 
 set(SOURCES
     main.cpp
     src/utils.cpp
+    src/profile.cpp
     src/terminal.cpp
     src/browser.cpp
     src/commands.cpp
@@ -71,6 +72,8 @@ set(SOURCES
     src/permissionbar.cpp
     src/splash.cpp
     src/window.cpp
+    src/cookieimport.cpp
+    src/headerdump.cpp
 )
 
 qt6_add_resources(ACHROMA_RESOURCES resources.qrc)
@@ -83,6 +86,7 @@ target_link_libraries(Achroma PRIVATE
     Qt6::Widgets
     Qt6::WebEngineWidgets
     Qt6::Concurrent
+    Qt6::Sql
     qtermwidget6
 )
 
@@ -117,13 +121,16 @@ if(BUILD_TESTS)
         src/permissionbar.cpp
         src/terminal.cpp
         src/utils.cpp
+        src/profile.cpp
         src/triggers.cpp
         src/ipc.cpp
         src/adblockinterceptor.cpp
+        src/cookieimport.cpp
+        src/headerdump.cpp
     )
     target_include_directories(test_commands PRIVATE ${CMAKE_SOURCE_DIR})
     target_link_libraries(test_commands PRIVATE
-        Qt6::Core Qt6::Test Qt6::Gui Qt6::Widgets Qt6::WebEngineWidgets qtermwidget6)
+        Qt6::Core Qt6::Test Qt6::Gui Qt6::Widgets Qt6::WebEngineWidgets Qt6::Sql qtermwidget6)
     add_test(NAME CommandTests COMMAND test_commands)
     set_tests_properties(CommandTests PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0")
 

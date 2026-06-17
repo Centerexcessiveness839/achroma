@@ -32,6 +32,7 @@
 #include <QRegularExpression>
 #include <QResizeEvent>
 #include <QScrollArea>
+#include <QSet>
 #include <QSettings>
 #include <QShortcut>
 #include <QSplitter>
@@ -43,6 +44,8 @@
 #include <QWebEngineDownloadRequest>
 #include <QWebEnginePage>
 #include <QWebEngineProfile>
+#include <QWebEngineScript>
+#include <QWebEngineScriptCollection>
 #include <QWebEngineSettings>
 #include <QWebEngineView>
 #include <QtGlobal>
@@ -183,6 +186,283 @@ AchromaWindow::~AchromaWindow() = default;
 
 void AchromaWindow::setupUi()
 {
+    {
+        auto* profile = Achroma::mainProfile();
+        const QString profilePath = Achroma::dataDir() + "/webengine";
+        const QString cachePath = Achroma::dataDir() + "/webcache";
+        QDir().mkpath(profilePath);
+        QDir().mkpath(cachePath);
+        profile->setPersistentStoragePath(profilePath);
+        profile->setCachePath(cachePath);
+        profile->setPersistentCookiesPolicy(QWebEngineProfile::ForcePersistentCookies);
+        profile->setHttpCacheType(QWebEngineProfile::DiskHttpCache);
+
+        const QString ua = profile->httpUserAgent();
+        const QString patched = QString(ua).replace(QRegularExpression(R"(QtWebEngine/[\d.]+ )"), "").simplified();
+        profile->setHttpUserAgent(patched);
+
+        QWebEngineScript chromeCompat;
+        chromeCompat.setName("achroma-chrome-compat");
+        chromeCompat.setInjectionPoint(QWebEngineScript::DocumentCreation);
+        chromeCompat.setWorldId(QWebEngineScript::MainWorld);
+        chromeCompat.setRunsOnSubFrames(true);  // must cover sign-in iframes
+        chromeCompat.setSourceCode(R"SCRIPT(
+(function () {
+    'use strict';
+
+    // --- window.chrome stub ---
+    // Qt WebEngine exposes an incomplete window.chrome (object but no .runtime).
+    // Patch it with the full Chrome runtime API regardless.
+    {
+        var makePort = function (name) {
+            return {
+                name: name || '',
+                postMessage: function () {},
+                disconnect:  function () {},
+                onDisconnect: { addListener: function () {}, removeListener: function () {}, hasListener: function () { return false; } },
+                onMessage:    { addListener: function () {}, removeListener: function () {}, hasListener: function () { return false; } }
+            };
+        };
+        var stubListeners = function () {
+            return { addListener: function () {}, removeListener: function () {}, hasListener: function () { return false; } };
+        };
+        var fullRuntime = {
+            id: undefined,
+            lastError: undefined,
+            connect: function (extId, info) { return makePort(info && info.name); },
+            connectNative: function () { return makePort(''); },
+            sendMessage: function () {},
+            sendNativeMessage: function () {},
+            getBackgroundPage: function (cb) { if (typeof cb === 'function') cb(undefined); },
+            openOptionsPage: function () {},
+            getPackageDirectoryEntry: function (cb) { if (typeof cb === 'function') cb(undefined); },
+            getManifest:           function () { return {}; },
+            getURL:                function () { return ''; },
+            reload:                function () {},
+            requestUpdateCheck:    function (cb) { if (typeof cb === 'function') cb('no_update', {}); },
+            setUninstallURL:       function () {},
+            restart:               function () {},
+            restartAfterDelay:     function () {},
+            PlatformOs:   { MAC: 'mac', WIN: 'win', ANDROID: 'android', CROS: 'cros', LINUX: 'linux', OPENBSD: 'openbsd' },
+            PlatformArch: { ARM: 'arm', X86_32: 'x86-32', X86_64: 'x86-64' },
+            OnInstalledReason: { INSTALL: 'install', UPDATE: 'update', CHROME_UPDATE: 'chrome_update', SHARED_MODULE_UPDATE: 'shared_module_update' },
+            OnRestartRequiredReason: { APP_UPDATE: 'app_update', OS_UPDATE: 'os_update', PERIODIC: 'periodic' },
+            onMessage:             stubListeners(),
+            onConnect:             stubListeners(),
+            onInstalled:           stubListeners(),
+            onStartup:             stubListeners(),
+            onUpdateAvailable:     stubListeners(),
+            onRestartRequired:     stubListeners(),
+            onMessageExternal:     stubListeners(),
+            onConnectExternal:     stubListeners(),
+            onSuspend:             stubListeners(),
+            onSuspendCanceled:     stubListeners(),
+            onBrowserUpdateAvailable: stubListeners()
+        };
+        var fullChrome = {
+            app: {
+                isInstalled: false,
+                getDetails:     function () { return null; },
+                getIsInstalled: function () { return false; },
+                runningState:   function () { return 'cannot_run'; },
+                InstallState: { DISABLED: 'disabled', INSTALLED: 'installed', NOT_INSTALLED: 'not_installed' },
+                RunningState:  { CANNOT_RUN: 'cannot_run', READY_TO_RUN: 'ready_to_run', RUNNING: 'running' }
+            },
+            csi: function () {
+                var now = Date.now() / 1000;
+                return {
+                    startE: now,
+                    onloadT: now,
+                    pageT: { _value: { navigationStart: 0, fetchStart: 0, domainLookupStart: 0, domainLookupEnd: 0, connectStart: 0, connectEnd: 0, requestStart: 0, responseStart: 0, responseEnd: 0, domLoading: 0, domInteractive: 0, domContentLoadedEventStart: 0, domContentLoadedEventEnd: 0, domComplete: 0, loadEventStart: 0, loadEventEnd: 0 } },
+                    tran: 15
+                };
+            },
+            loadTimes: function () {
+                var now = Date.now() / 1000;
+                return {
+                    requestTime:               now, startLoadTime: now,
+                    commitLoadTime:            now, finishLoadTime: now,
+                    firstPaintTime:            now, firstPaintAfterLoadTime: now,
+                    navigationType:            'Other',
+                    wasFetchedViaSpdy:          false,
+                    wasNpnNegotiated:           false,
+                    npnNegotiatedProtocol:      'unknown',
+                    wasAlternateProtocolAvailable: false,
+                    connectionInfo:             'unknown'
+                };
+            },
+            webstore: {
+                install: function (url, success, failure) {
+                    if (typeof failure === 'function') failure('Web Store is not available in this browser.');
+                },
+                onInstallStageChanged: stubListeners(),
+                onDownloadProgress:    stubListeners()
+            },
+            runtime: fullRuntime
+        };
+        var existingChrome = (typeof window.chrome === 'object' && window.chrome !== null) ? window.chrome : {};
+        var merged = {};
+        var key;
+        // Copy fullChrome properties first, then let existingChrome override
+        // anything non-function that already exists (but keep our runtime,
+        // csi, webstore, loadTimes).
+        for (key in fullChrome) { merged[key] = fullChrome[key]; }
+        for (key in existingChrome) {
+            if (typeof existingChrome[key] === 'function' &&
+                typeof fullChrome[key] === 'undefined') {
+                merged[key] = existingChrome[key];
+            }
+        }
+        try {
+            Object.defineProperty(window, 'chrome', { value: merged, writable: false, enumerable: true, configurable: false });
+        } catch (e) {
+            window.chrome = merged;
+        }
+    }
+
+    // --- suppress navigator.webdriver ---
+    try { Object.defineProperty(navigator, 'webdriver', { get: function () { return undefined; }, configurable: true }); } catch (e) {}
+
+    // --- navigator.userAgentData (UA Client Hints) ---
+    // Qt WebEngine provides a native userAgentData but with wrong brands
+    // (lacking "Google Chrome"). Always override if brands are wrong.
+    {
+        var verMatch = navigator.userAgent.match(/Chrome\/(\d+)/);
+        var ver = verMatch ? verMatch[1] : '128';
+        var needsPatch = true;
+        if (navigator.userAgentData && Array.isArray(navigator.userAgentData.brands)) {
+            needsPatch = !navigator.userAgentData.brands.some(function (b) {
+                return b.brand === 'Google Chrome';
+            });
+        }
+        if (needsPatch) {
+            var brands = [
+                { brand: 'Not/A)Brand',   version: '99'  },
+                { brand: 'Google Chrome', version: ver   },
+                { brand: 'Chromium',      version: ver   }
+            ];
+            var fullList = brands.map(function (b) {
+                return { brand: b.brand, version: b.brand.startsWith('Not') ? '99.0.0.0' : ver + '.0.0.0' };
+            });
+            var uad = {
+                brands:   brands,
+                mobile:   false,
+                platform: 'Linux',
+                getHighEntropyValues: function (hints) {
+                    return Promise.resolve({
+                        brands:          brands,
+                        mobile:          false,
+                        platform:        'Linux',
+                        platformVersion: '6.0.0',
+                        architecture:    'x86',
+                        bitness:         '64',
+                        model:           '',
+                        uaFullVersion:   ver + '.0.0.0',
+                        fullVersionList: fullList
+                    });
+                },
+                toJSON: function () { return { brands: brands, mobile: false, platform: 'Linux' }; }
+            };
+            try { Object.defineProperty(navigator, 'userAgentData', { get: function () { return uad; }, configurable: true }); } catch (e) {}
+        }
+    }
+
+    // --- navigator.plugins: empty list is a WebView fingerprint signal ---
+    // Chrome on Linux always has at least the internal PDF viewer.
+    try {
+        if (navigator.plugins.length === 0) {
+            const fakePdf = { name: 'Chrome PDF Plugin', filename: 'internal-pdf-viewer', description: 'Portable Document Format', length: 0 };
+            Object.defineProperty(navigator, 'plugins', {
+                get: function () {
+                    const arr = [fakePdf];
+                    arr.item = function (i) { return arr[i]; };
+                    arr.namedItem = function (n) { return arr.find(function (p) { return p.name === n; }) || null; };
+                    arr.refresh = function () {};
+                    return arr;
+                },
+                configurable: true
+            });
+            Object.defineProperty(navigator, 'mimeTypes', {
+                get: function () {
+                    const mt = [{ type: 'application/pdf', description: 'Portable Document Format', suffixes: 'pdf' }];
+                    mt.item = function (i) { return mt[i]; };
+                    mt.namedItem = function (n) { return mt.find(function (m) { return m.type === n; }) || null; };
+                    return mt;
+                },
+                configurable: true
+            });
+        }
+    } catch (e) {}
+
+    // --- permissions stub ---
+    if (navigator.permissions && !navigator.permissions.__achromaPatch) {
+        var origPerm = navigator.permissions.query.bind(navigator.permissions);
+        navigator.permissions.query = function (desc) {
+            return origPerm(desc).catch(function () {
+                return Promise.resolve({ state: 'prompt', onchange: null });
+            });
+        };
+        navigator.permissions.__achromaPatch = true;
+    }
+
+    // --- navigator overrides ---
+    try {
+        if (navigator.productSub !== '20030107') {
+            Object.defineProperty(navigator, 'productSub', { get: function () { return '20030107'; }, configurable: true });
+        }
+    } catch (e) {}
+    try {
+        if (navigator.vendor !== 'Google Inc.') {
+            Object.defineProperty(navigator, 'vendor', { get: function () { return 'Google Inc.'; }, configurable: true });
+        }
+    } catch (e) {}
+    try {
+        if (!navigator.hardwareConcurrency || navigator.hardwareConcurrency < 2) {
+            Object.defineProperty(navigator, 'hardwareConcurrency', { get: function () { return 8; }, configurable: true });
+        }
+    } catch (e) {}
+    try {
+        if (navigator.deviceMemory === undefined || navigator.deviceMemory === 0) {
+            Object.defineProperty(navigator, 'deviceMemory', { get: function () { return 8; }, configurable: true });
+        }
+    } catch (e) {}
+    try {
+        Object.defineProperty(screen, 'colorDepth', { get: function () { return 24; }, configurable: true });
+    } catch (e) {}
+
+    // --- navigator.credentials (Credential Management API) ---
+    try {
+        if (!navigator.credentials) {
+            Object.defineProperty(navigator, 'credentials', {
+                value: {
+                    get:        function () { return Promise.resolve(null); },
+                    store:      function () { return Promise.resolve(); },
+                    create:     function () { return Promise.resolve(null); },
+                    preventSilentAccess: function () { return Promise.resolve(); }
+                },
+                configurable: true
+            });
+        }
+    } catch (e) {}
+
+    // --- window.external (non-null in Chrome, null in embedded views) ---
+    if (typeof window.external === 'undefined' || window.external === null) {
+        try {
+            Object.defineProperty(window, 'external', {
+                value: {
+                    IsSearchProviderInstalled: function () { return false; },
+                    AddSearchProvider:         function () {}
+                },
+                configurable: true
+            });
+        } catch (e) {}
+    }
+
+})();
+)SCRIPT");
+        profile->scripts()->insert(chromeCompat);
+    }
+
     setWindowFlags(Qt::FramelessWindowHint | Qt::WindowSystemMenuHint);
     setWindowTitle("achroma");
     resize(1200, 800);
@@ -243,11 +523,18 @@ void AchromaWindow::setupUi()
     tbLayout->addWidget(m_titleLabel);
 
     auto* tbRightSpacer = new QWidget(m_titleBar);
-    tbRightSpacer->setFixedWidth(74);
+    tbRightSpacer->setFixedWidth(100);
     tbRightSpacer->setStyleSheet("background: transparent; border: none;");
     auto* audioLayout = new QHBoxLayout(tbRightSpacer);
-    audioLayout->setContentsMargins(8, 0, 14, 0);
-    audioLayout->setSpacing(0);
+    audioLayout->setContentsMargins(4, 0, 14, 0);
+    audioLayout->setSpacing(6);
+    m_adblockIndicator = new QLabel(tbRightSpacer);
+    m_adblockIndicator->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    m_adblockIndicator->setText("A");
+    m_adblockIndicator->setStyleSheet(
+        "color: #2a2a2a; font-family: monospace; font-size: 9px; letter-spacing: 1px; border: none;"
+    );
+    audioLayout->addWidget(m_adblockIndicator);
     m_audioIndicator = new QLabel(tbRightSpacer);
     m_audioIndicator->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     m_audioIndicator->setFixedWidth(52);
@@ -458,12 +745,23 @@ void AchromaWindow::setupUi()
         setStatus("IPC socket failed — CLI commands unavailable", 0);
 
     m_adBlocker = new AdBlockInterceptor(this);
+    {
+        const QString ua = Achroma::mainProfile()->httpUserAgent();
+        static const QRegularExpression chromeVerRe(R"(Chrome/(\d+))");
+        const auto mv = chromeVerRe.match(ua);
+        if (mv.hasMatch())
+            m_adBlocker->setChromeVersion(mv.captured(1));
+    }
     QString blocklistPath = Achroma::configDir() + "/blocklist.txt";
     m_adBlocker->loadBlocklist(blocklistPath);
-    QWebEngineProfile::defaultProfile()->setUrlRequestInterceptor(m_adBlocker);
-    QWebEngineProfile::defaultProfile()->setSpellCheckEnabled(true);
+    Achroma::mainProfile()->setUrlRequestInterceptor(m_adBlocker);
+    Achroma::mainProfile()->setSpellCheckEnabled(true);
 
     m_dispatcher->setAdBlockEnabled(m_adBlocker->isEnabled());
+    if (m_adblockIndicator && m_adBlocker->isEnabled())
+        m_adblockIndicator->setStyleSheet(
+            "color: #3a3a3a; font-family: monospace; font-size: 9px; letter-spacing: 1px; border: none;"
+        );
     m_dispatcher->adBlockToggleCallback = [this](bool on)
     {
         if (m_adBlocker)
@@ -471,10 +769,15 @@ void AchromaWindow::setupUi()
             m_adBlocker->setEnabled(on);
             setStatus(QString("Ad block %1").arg(on ? "on" : "off"), 2000);
         }
+        if (m_adblockIndicator)
+            m_adblockIndicator->setStyleSheet(
+                on ? "color: #3a3a3a; font-family: monospace; font-size: 9px; letter-spacing: 1px; border: none;"
+                   : "color: #7a2a2a; font-family: monospace; font-size: 9px; letter-spacing: 1px; border: none;"
+            );
     };
 
     connect(
-        QWebEngineProfile::defaultProfile(),
+        Achroma::mainProfile(),
         &QWebEngineProfile::downloadRequested,
         this,
         [this](QWebEngineDownloadRequest* dl)
@@ -871,9 +1174,17 @@ void AchromaWindow::setupShortcuts()
         {
             if (m_adBlocker)
             {
-                m_adBlocker->setEnabled(!m_adBlocker->isEnabled());
-                m_dispatcher->setAdBlockEnabled(m_adBlocker->isEnabled());
-                setStatus(QString("Ad block %1").arg(m_adBlocker->isEnabled() ? "on" : "off"), 2000);
+                const bool on = !m_adBlocker->isEnabled();
+                m_adBlocker->setEnabled(on);
+                m_dispatcher->setAdBlockEnabled(on);
+                setStatus(QString("Ad block %1").arg(on ? "on" : "off"), 2000);
+                if (m_adblockIndicator)
+                    m_adblockIndicator->setStyleSheet(
+                        on ? "color: #3a3a3a; font-family: monospace; font-size: 9px; letter-spacing: 1px; border: "
+                             "none;"
+                           : "color: #7a2a2a; font-family: monospace; font-size: 9px; letter-spacing: 1px; border: "
+                             "none;"
+                    );
             }
         }
     );
@@ -947,6 +1258,13 @@ void AchromaWindow::setupShortcuts()
         &QShortcut::activated,
         this,
         [this]() { m_dispatcher->execute("install"); }
+    );
+
+    connect(
+        new QShortcut(QKeySequence(keys.systemBrowser), this),
+        &QShortcut::activated,
+        this,
+        [this]() { m_dispatcher->execute("system"); }
     );
 
     connect(m_browser, &BrowserTabs::urlBarReturnPressed, this, &AchromaWindow::onUrlBarReturnPressed);
@@ -1117,52 +1435,79 @@ void AchromaWindow::setupHelpOverlay()
         vbox->addWidget(gw);
     };
 
-    addSection(
-        "NAVIGATION",
+    auto buildCommandKey = [](const CommandMeta& meta) -> QString
+    {
+        QString key = ":" + meta.name;
+        if (!meta.aliases.isEmpty())
+            key += "  :" + meta.aliases.first();
+        if (!meta.argHint.isEmpty())
+            key += "  " + meta.argHint;
+        return key;
+    };
+
+    const struct
+    {
+        const char* id;
+        const char* label;
+    } commandCategories[] = {
+        {"navigation", "NAVIGATION"},
+        {"search", "SEARCH"},
+        {"tools", "TOOLS"},
+        {"github", "GITHUB"},
+        {"web", "WEB"},
+        {"terminal", "TERMINAL COMMANDS"},
+    };
+
+    for (const auto& cat : commandCategories)
+    {
+        QVector<Entry> entries;
+        for (const auto& meta : m_dispatcher->builtinCommands())
         {
-            {":open  :o <url>", "Navigate current tab"},
-            {":tab   :t <url>", "Open in new tab"},
-            {":close :c", "Close current tab"},
-            {":back  :b", "Go back"},
-            {":forward :f", "Go forward"},
-            {":r", "Reload page"},
-            {":home", "Go to home dashboard"},
-            {":undo  :u", "Reopen closed tab"},
-            {":next  :n", "Next tab"},
-            {":prev  :p", "Previous tab"},
-            {":duplicate", "Duplicate current tab"},
-            {":incognito", "New incognito tab"},
+            if (meta.category != cat.id)
+                continue;
+            entries.append(Entry{buildCommandKey(meta), meta.description});
         }
-    );
-
-    QVector<Entry> searchEntries;
-    searchEntries.append(Entry{":s <query>", "DuckDuckGo search"});
-    for (auto it = m_dispatcher->searchEngines().constBegin(); it != m_dispatcher->searchEngines().constEnd(); ++it)
-    {
-        if (it.key() == "s" || it.key() == "ddg")
-            continue;
-        QString label = it.key() + " <query>";
-        QString desc = it.value();
-        desc.remove(QRegularExpression("https?://"));
-        desc = desc.section('/', 0, 0);
-        if (desc.isEmpty())
-            desc = "Configured search engine";
-        searchEntries.append(Entry{label, desc});
+        if (!entries.isEmpty())
+            addSection(cat.label, entries);
     }
-    searchEntries.append(Entry{":bookmark :bm <n>", "Bookmark current page"});
-    addSection("SEARCH", searchEntries);
 
-    QVector<Entry> customEntries;
-    for (auto it = m_dispatcher->customCommands().constBegin(); it != m_dispatcher->customCommands().constEnd(); ++it)
     {
-        const QJsonObject cmd = it.value();
-        const QString action = cmd["action"].toString("custom");
-        customEntries.append(
-            Entry{":" + it.key() + " <arg>", action.left(1).toUpper() + action.mid(1) + " custom command"}
-        );
+        QVector<Entry> searchEngineEntries;
+        QSet<QString> knownNames;
+        for (const auto& meta : m_dispatcher->builtinCommands())
+        {
+            knownNames.insert(meta.name);
+            for (const auto& a : meta.aliases)
+                knownNames.insert(a);
+        }
+        for (auto it = m_dispatcher->searchEngines().constBegin(); it != m_dispatcher->searchEngines().constEnd(); ++it)
+        {
+            if (knownNames.contains(it.key()) || m_dispatcher->customCommands().contains(it.key()))
+                continue;
+            QString desc = it.value();
+            desc.remove(QRegularExpression("https?://"));
+            desc = desc.section('/', 0, 0);
+            if (desc.isEmpty())
+                desc = "Search engine";
+            searchEngineEntries.append(Entry{":" + it.key() + " <query>", desc});
+        }
+        if (!searchEngineEntries.isEmpty())
+            addSection("SEARCH ENGINES", searchEngineEntries);
     }
-    if (!customEntries.isEmpty())
-        addSection("CUSTOM", customEntries);
+
+    {
+        QVector<Entry> customEntries;
+        for (auto it = m_dispatcher->customCommands().constBegin(); it != m_dispatcher->customCommands().constEnd();
+             ++it)
+        {
+            const QString action = it.value()["action"].toString("custom");
+            customEntries.append(
+                Entry{":" + it.key() + " <arg>", action.left(1).toUpper() + action.mid(1) + " (custom)"}
+            );
+        }
+        if (!customEntries.isEmpty())
+            addSection("CUSTOM", customEntries);
+    }
 
     addSection(
         "KEYBOARD",
@@ -1174,17 +1519,18 @@ void AchromaWindow::setupHelpOverlay()
             {kcfg.focusTerminal, "Focus terminal"},
             {kcfg.findInPage, "Find in page"},
             {kcfg.linkHints, "Link hints overlay"},
-            {kcfg.fuzzyFinder, "Fuzzy file / tab finder"},
+            {kcfg.fuzzyFinder, "Fuzzy finder / command palette"},
             {kcfg.toggleReader, "Toggle reader mode"},
             {kcfg.toggleDarkMode, "Toggle dark mode"},
             {kcfg.toggleAdBlock, "Toggle ad blocking"},
             {kcfg.fullscreen, "Toggle fullscreen"},
+            {kcfg.systemBrowser, "Open in system browser"},
             {kcfg.showHelp, "This window"},
         }
     );
 
     addSection(
-        "TERMINAL",
+        "TERMINAL KEYS",
         {
             {kcfg.toggleTerminal, "Toggle terminal"},
             {kcfg.terminalCopy, "Copy selection"},
@@ -1193,26 +1539,13 @@ void AchromaWindow::setupHelpOverlay()
             {kcfg.terminalZoomIn, "Zoom in"},
             {kcfg.terminalZoomOut, "Zoom out"},
             {kcfg.terminalZoomReset, "Reset zoom"},
-            {kcfg.sendToTerm, "Send selection to terminal"},
-            {kcfg.codeBlock, "Extract code block"},
-            {kcfg.installCmd, "Find install command"},
-        }
-    );
-
-    addSection(
-        "TOOLS",
-        {
+            {kcfg.sendToTerm, "Send page selection to terminal"},
+            {kcfg.codeBlock, "Extract code block to file"},
+            {kcfg.installCmd, "Find install command on page"},
             {kcfg.devTools, "Developer tools"},
             {kcfg.viewSource, "View page source"},
             {kcfg.printPage, "Print / save as PDF"},
             {kcfg.toggleBmbar, "Toggle bookmark bar"},
-            {":pipe <cmd>", "Run command, show output in tab"},
-            {":reader", "Toggle reader mode"},
-            {":dark / :light", "Toggle dark mode"},
-            {":adblock", "Toggle ad blocking"},
-            {":session save/load/list", "Session management"},
-            {":history", "Recent URLs"},
-            {":reload", "Reload config.json"},
         }
     );
 

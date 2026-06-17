@@ -58,6 +58,7 @@ Browser control:
   tabs                   List all open tabs
   focus                  Focus the URL bar
   execute <cmd>          Run any Achroma command (e.g. 'dark', 'zoom 150', 'reader')
+  cookies [source|file]  Import cookies; e.g. cookies ~/Downloads/cookies.txt
   detected_url           Print last URL detected in terminal output
 
 Scripting:
@@ -72,6 +73,7 @@ Examples:
   achroma-cli js "JSON.stringify([...document.querySelectorAll('h1')].map(h=>h.textContent))"
   echo "document.body.innerText" | achroma-cli js -
   achroma-cli screenshot | xargs xdg-open
+  achroma-cli cookies ~/Downloads/cookies.txt
   cargo build 2>&1 | achroma-cli pipe
   achroma-cli open "https://example.com/checkout" && achroma-cli wait-for "*/thank-you*"
   achroma-cli js "document.body.innerText" | llm "summarize this page"
