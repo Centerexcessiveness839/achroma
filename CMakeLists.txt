@@ -60,25 +60,26 @@ find_package(qtermwidget6 REQUIRED)
 
 set(SOURCES
     main.cpp
-    src/utils.cpp
-    src/profile.cpp
-    src/terminal.cpp
-    src/browser.cpp
+    src/core/utils.cpp
+    src/core/profile.cpp
+    src/term/terminal.cpp
+    src/ui/browser.cpp
     src/commands.cpp
-    src/triggers.cpp
+    src/term/triggers.cpp
     src/ipc.cpp
-    src/adblockinterceptor.cpp
-    src/fuzzyfinder.cpp
-    src/permissionbar.cpp
-    src/splash.cpp
-    src/window.cpp
-    src/cookieimport.cpp
-    src/headerdump.cpp
+    src/net/adblockinterceptor.cpp
+    src/ui/fuzzyfinder.cpp
+    src/ui/permissionbar.cpp
+    src/ui/splash.cpp
+    src/ui/window.cpp
+    src/net/cookieimport.cpp
+    src/net/headerdump.cpp
 )
 
 qt6_add_resources(ACHROMA_RESOURCES resources.qrc)
 
 add_executable(Achroma ${SOURCES} ${ACHROMA_RESOURCES})
+target_include_directories(Achroma PRIVATE ${CMAKE_SOURCE_DIR}/src)
 
 target_link_libraries(Achroma PRIVATE
     Qt6::Core
@@ -98,17 +99,17 @@ if(BUILD_TESTS)
     add_executable(achroma_test
         test/test.cpp
         test/test_helpers.h
-        src/utils.cpp
+        src/core/utils.cpp
     )
-    target_include_directories(achroma_test PRIVATE ${CMAKE_SOURCE_DIR})
+    target_include_directories(achroma_test PRIVATE ${CMAKE_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/src)
     target_link_libraries(achroma_test PRIVATE Qt6::Core Qt6::Gui Qt6::Test)
     add_test(NAME AchromaTests COMMAND achroma_test)
 
     add_executable(test_adblock
         test/test_adblock.cpp
-        src/adblockinterceptor.cpp
+        src/net/adblockinterceptor.cpp
     )
-    target_include_directories(test_adblock PRIVATE ${CMAKE_SOURCE_DIR})
+    target_include_directories(test_adblock PRIVATE ${CMAKE_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/src)
     target_link_libraries(test_adblock PRIVATE Qt6::Core Qt6::Test Qt6::WebEngineCore)
     add_test(NAME AdBlockTests COMMAND test_adblock)
     set_tests_properties(AdBlockTests PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0")
@@ -117,18 +118,18 @@ if(BUILD_TESTS)
         test/test_commands.cpp
         test/test_commands_helpers.h
         src/commands.cpp
-        src/browser.cpp
-        src/permissionbar.cpp
-        src/terminal.cpp
-        src/utils.cpp
-        src/profile.cpp
-        src/triggers.cpp
+        src/ui/browser.cpp
+        src/ui/permissionbar.cpp
+        src/term/terminal.cpp
+        src/core/utils.cpp
+        src/core/profile.cpp
+        src/term/triggers.cpp
         src/ipc.cpp
-        src/adblockinterceptor.cpp
-        src/cookieimport.cpp
-        src/headerdump.cpp
+        src/net/adblockinterceptor.cpp
+        src/net/cookieimport.cpp
+        src/net/headerdump.cpp
     )
-    target_include_directories(test_commands PRIVATE ${CMAKE_SOURCE_DIR})
+    target_include_directories(test_commands PRIVATE ${CMAKE_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/src)
     target_link_libraries(test_commands PRIVATE
         Qt6::Core Qt6::Test Qt6::Gui Qt6::Widgets Qt6::WebEngineWidgets Qt6::Sql qtermwidget6)
     add_test(NAME CommandTests COMMAND test_commands)
@@ -137,9 +138,9 @@ if(BUILD_TESTS)
     add_executable(test_scripts
         test/test_scripts.cpp
         test/test_scripts_helpers.h
-        src/utils.cpp
+        src/core/utils.cpp
     )
-    target_include_directories(test_scripts PRIVATE ${CMAKE_SOURCE_DIR})
+    target_include_directories(test_scripts PRIVATE ${CMAKE_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/src)
     target_link_libraries(test_scripts PRIVATE
         Qt6::Core Qt6::Test Qt6::Gui Qt6::Widgets Qt6::WebEngineWidgets)
     add_test(NAME ScriptTests COMMAND test_scripts)

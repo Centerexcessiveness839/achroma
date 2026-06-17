@@ -1,4 +1,4 @@
-#include "src/adblockinterceptor.h"
+#include "src/net/adblockinterceptor.h"
 #include <QTemporaryFile>
 #include <QUrl>
 #include <QtTest>

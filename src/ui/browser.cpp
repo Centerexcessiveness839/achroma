@@ -1,7 +1,7 @@
-#include "browser.h"
+#include "ui/browser.h"
 #include "commands.h"
-#include "permissionbar.h"
-#include "utils.h"
+#include "core/utils.h"
+#include "ui/permissionbar.h"
 #include <QAction>
 #include <QApplication>
 #include <QClipboard>
@@ -1184,12 +1184,10 @@ void BrowserTabs::toggleDarkMode()
     m_darkModeEnabled = !m_darkModeEnabled;
     for (int i = 0; i < m_tabs->count(); i++)
     {
-        QWebEngineView* v = qobject_cast<QWebEngineView*>(m_tabs->widget(i));
 #if QT_VERSION >= QT_VERSION_CHECK(6, 7, 0)
+        QWebEngineView* v = qobject_cast<QWebEngineView*>(m_tabs->widget(i));
         if (v)
-        {
             v->settings()->setAttribute(QWebEngineSettings::ForceDarkMode, m_darkModeEnabled);
-        }
 #endif
     }
 #if QT_VERSION >= QT_VERSION_CHECK(6, 7, 0)

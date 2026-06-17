@@ -1,5 +1,5 @@
 #include "src/commands.h"
-#include "src/utils.h"
+#include "src/core/utils.h"
 #include "test_commands_helpers.h"
 #include <QJsonArray>
 #include <QTemporaryFile>

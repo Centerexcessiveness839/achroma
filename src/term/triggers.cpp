@@ -1,6 +1,6 @@
-#include "triggers.h"
-#include "browser.h"
-#include "utils.h"
+#include "term/triggers.h"
+#include "core/utils.h"
+#include "ui/browser.h"
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QJsonValue>

@@ -1,8 +1,8 @@
-#include "fuzzyfinder.h"
-#include "browser.h"
+#include "ui/fuzzyfinder.h"
 #include "commands.h"
-#include "terminal.h"
-#include "utils.h"
+#include "core/utils.h"
+#include "term/terminal.h"
+#include "ui/browser.h"
 #include <QApplication>
 #include <QColor>
 #include <QDateTime>

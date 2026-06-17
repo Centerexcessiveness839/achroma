@@ -1,4 +1,4 @@
-#include "cookieimport.h"
+#include "net/cookieimport.h"
 #include <QDateTime>
 #include <QDir>
 #include <QFile>
@@ -11,6 +11,7 @@
 #include <QSqlQuery>
 #include <QStandardPaths>
 #include <QTextStream>
+#include <QTimeZone>
 #include <QUrl>
 #include <QWebEngineCookieStore>
 #include <QWebEngineProfile>

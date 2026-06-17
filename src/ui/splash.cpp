@@ -1,4 +1,4 @@
-#include "splash.h"
+#include "ui/splash.h"
 #include <QApplication>
 #include <QGraphicsOpacityEffect>
 #include <QPainter>

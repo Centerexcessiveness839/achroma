@@ -1,4 +1,4 @@
-#include "src/utils.h"
+#include "src/core/utils.h"
 #include "test_scripts_helpers.h"
 
 bool TestScripts::waitForLoad(QWebEngineView* view, int timeoutMs)

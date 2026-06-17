@@ -1,9 +1,9 @@
 #include "commands.h"
-#include "browser.h"
-#include "cookieimport.h"
-#include "headerdump.h"
-#include "terminal.h"
-#include "utils.h"
+#include "core/utils.h"
+#include "net/cookieimport.h"
+#include "net/headerdump.h"
+#include "term/terminal.h"
+#include "ui/browser.h"
 #include <QColor>
 #include <QDesktopServices>
 #include <QDir>
@@ -770,13 +770,13 @@ void CommandDispatcher::setupBuiltins()
                 case QWebEngineProfile::AllowPersistentCookies:
                     policy = "persistent only";
                     break;
-            case QWebEngineProfile::ForcePersistentCookies:
-                policy = "force session + persistent";
-                break;
+                case QWebEngineProfile::ForcePersistentCookies:
+                    policy = "force session + persistent";
+                    break;
 #if QT_VERSION >= QT_VERSION_CHECK(6, 8, 0)
-            case QWebEngineProfile::OnlyPersistentCookies:
-                policy = "only persistent";
-                break;
+                case QWebEngineProfile::OnlyPersistentCookies:
+                    policy = "only persistent";
+                    break;
 #endif
             }
             log << "cookie policy: " + policy;

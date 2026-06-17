@@ -333,19 +333,25 @@ make -C build lint        # clang-tidy
 
 ```
 src/
-  browser.h/cpp          Tab management, URL bar, session, autocomplete, local Markdown routing
-  terminal.h/cpp         QTermWidget wrapper, PTY output, zoom
-  commands.h/cpp         Command dispatch, config load, search engines
-  triggers.h/cpp         Terminal output pattern matching
-  fuzzyfinder.h/cpp      Fuzzy file/tab/bookmark/command search
-  ipc.h/cpp              Unix socket server for CLI control
-  adblockinterceptor.h/cpp  URL request interceptor (EasyList-style + Sec-CH-UA header patching)
-  cookieimport.h/cpp     Cookie import from Firefox, Chromium, and Netscape files
-  headerdump.h/cpp       Local HTTP server for header/fingerprint diagnostics
-  profile.cpp            Named WebEngine profile factory (persistent, non-off-the-record)
-  splash.h/cpp           Startup splash screen
-  window.h/cpp           Main window, layout, shortcuts, dynamic help overlay, close confirmation
-  utils.h/cpp            URL formatting, ANSI stripping, JS injection, Markdown reader HTML
+  core/                   # Utilities and compatibility
+    utils.h/cpp           URL formatting, ANSI stripping, JS injection, Markdown reader HTML
+    profile.cpp           Named WebEngine profile factory (persistent, non-off-the-record)
+    qtcompat.h            Qt version compatibility layer (portable across distro Qt versions)
+  ui/                     # Browser UI components
+    window.h/cpp          Main window, layout, shortcuts, dynamic help overlay, close confirmation
+    browser.h/cpp         Tab management, URL bar, session, autocomplete, local Markdown routing
+    permissionbar.h/cpp   Permission request bar
+    splash.h/cpp          Startup splash screen
+    fuzzyfinder.h/cpp     Fuzzy file/tab/bookmark/command search
+  term/                   # Terminal integration
+    terminal.h/cpp        QTermWidget wrapper, PTY output, zoom
+    triggers.h/cpp        Terminal output pattern matching
+  net/                    # Network interception and I/O
+    adblockinterceptor.h/cpp  URL request interceptor (EasyList-style + Sec-CH-UA header patching)
+    cookieimport.h/cpp    Cookie import from Firefox, Chromium, and Netscape files
+    headerdump.h/cpp      Local HTTP server for header/fingerprint diagnostics
+  commands.h/cpp          Command dispatch, config load, search engines
+  ipc.h/cpp               Unix socket server for CLI control
 
 test/
   test.cpp               Utils unit tests

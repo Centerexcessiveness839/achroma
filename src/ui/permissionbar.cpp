@@ -1,4 +1,4 @@
-#include "permissionbar.h"
+#include "ui/permissionbar.h"
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPushButton>

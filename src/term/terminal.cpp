@@ -1,4 +1,4 @@
-#include "terminal.h"
+#include "term/terminal.h"
 #include "commands.h"
 #include <QFont>
 #include <QMouseEvent>

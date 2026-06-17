@@ -32,7 +32,7 @@ struct AppConfig
     bool darkMode = false;
     QString qssFile;
 };
-#include "utils.h"
+#include "core/utils.h"
 
 struct HomepageConfig
 {

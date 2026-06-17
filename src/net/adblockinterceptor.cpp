@@ -1,4 +1,4 @@
-#include "adblockinterceptor.h"
+#include "net/adblockinterceptor.h"
 #include <QFile>
 #include <QRegularExpression>
 #include <QUrl>

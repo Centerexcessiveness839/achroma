@@ -1,5 +1,5 @@
-#include "src/splash.h"
-#include "src/window.h"
+#include "ui/splash.h"
+#include "ui/window.h"
 #include <QApplication>
 #include <QTimer>
 

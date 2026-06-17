@@ -1,7 +1,7 @@
 #include "ipc.h"
-#include "browser.h"
 #include "commands.h"
-#include "terminal.h"
+#include "term/terminal.h"
+#include "ui/browser.h"
 #include <QDir>
 #include <QFile>
 #include <QJsonArray>
