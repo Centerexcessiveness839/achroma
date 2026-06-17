@@ -770,12 +770,14 @@ void CommandDispatcher::setupBuiltins()
                 case QWebEngineProfile::AllowPersistentCookies:
                     policy = "persistent only";
                     break;
-                case QWebEngineProfile::ForcePersistentCookies:
-                    policy = "force session + persistent";
-                    break;
-                case QWebEngineProfile::OnlyPersistentCookies:
-                    policy = "only persistent";
-                    break;
+            case QWebEngineProfile::ForcePersistentCookies:
+                policy = "force session + persistent";
+                break;
+#if QT_VERSION >= QT_VERSION_CHECK(6, 8, 0)
+            case QWebEngineProfile::OnlyPersistentCookies:
+                policy = "only persistent";
+                break;
+#endif
             }
             log << "cookie policy: " + policy;
             log << QString("off the record: %1").arg(profile->isOffTheRecord() ? "yes" : "no");
